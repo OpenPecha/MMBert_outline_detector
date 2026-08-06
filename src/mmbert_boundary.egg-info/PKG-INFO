@@ -1,3 +1,17 @@
+Metadata-Version: 2.4
+Name: mmbert-boundary
+Version: 0.1.0
+Summary: Fine-tune mmBERT for Tibetan text boundary detection
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: torch>=2.0.0
+Requires-Dist: transformers>=4.30.0
+Requires-Dist: datasets>=2.14.0
+Requires-Dist: pyarrow>=12.0.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: tqdm>=4.65.0
+Requires-Dist: wandb>=0.17.0
+
 # mmBERT Tibetan Text Boundary Detector
 
 Fine-tunes [jhu-clsp/mmBERT-base](https://huggingface.co/jhu-clsp/mmBERT-base) (ModernBERT architecture, 307 M params, 8192-token context) for token classification to detect text boundaries in Tibetan Buddhist texts.
@@ -157,8 +171,6 @@ mmbert-boundary evaluate --model output/checkpoints/best --tolerance 20
 Reports micro/macro precision, recall, F1 per document and in aggregate. Full report saved to `output/eval_report.json`.
 
 ### Step 5 — Predict on new text
-
-> Full guide: [docs/05-predict.md](docs/05-predict.md)
 
 Run inference on raw Tibetan text files:
 

@@ -1,0 +1,2 @@
+[console_scripts]
+mmbert-boundary = mmbert_boundary.cli:main
