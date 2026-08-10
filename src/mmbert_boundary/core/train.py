@@ -194,8 +194,11 @@ def compute_label_counts(dataset) -> tuple[int, int]:
 def filter_negative_windows(dataset, neg_sample_ratio: float, seed: int = 42):
     """Keep all windows with B labels, subsample windows with only O labels.
 
+    Prefers the precomputed ``has_boundary`` column from prepare-data
+    (index filter). Falls back to scanning ``labels`` for older datasets.
+
     Args:
-        dataset: HuggingFace Dataset with a ``labels`` column.
+        dataset: HuggingFace Dataset with ``has_boundary`` and/or ``labels``.
         neg_sample_ratio: Fraction of all-O windows to keep.
         seed: RNG seed.
 
@@ -203,25 +206,33 @@ def filter_negative_windows(dataset, neg_sample_ratio: float, seed: int = 42):
         Filtered Dataset.
     """
     rng = np.random.default_rng(seed)
-    positive_indices = []
-    negative_indices = []
 
-    for i, labels in enumerate(dataset["labels"]):
-        has_b = any(lbl == LABEL_B for lbl in labels)
-        if has_b:
-            positive_indices.append(i)
-        else:
-            negative_indices.append(i)
+    if "has_boundary" in dataset.column_names:
+        flags = dataset["has_boundary"]
+        positive_indices = [i for i, flag in enumerate(flags) if flag]
+        negative_indices = [i for i, flag in enumerate(flags) if not flag]
+    else:
+        positive_indices = []
+        negative_indices = []
+        for i, labels in enumerate(dataset["labels"]):
+            if any(lbl == LABEL_B for lbl in labels):
+                positive_indices.append(i)
+            else:
+                negative_indices.append(i)
 
     n_neg_keep = int(len(negative_indices) * neg_sample_ratio)
-    kept_negatives = rng.choice(negative_indices, size=n_neg_keep, replace=False).tolist()
+    if n_neg_keep > 0 and negative_indices:
+        kept_negatives = rng.choice(
+            negative_indices, size=min(n_neg_keep, len(negative_indices)), replace=False
+        ).tolist()
+    else:
+        kept_negatives = []
 
     all_indices = sorted(positive_indices + kept_negatives)
     filtered = dataset.select(all_indices)
     print(f"  Negative sampling: {len(dataset):,} → {len(filtered):,} windows "
-          f"(kept {len(positive_indices):,} pos + {n_neg_keep:,}/{len(negative_indices):,} neg)")
+          f"(kept {len(positive_indices):,} pos + {len(kept_negatives):,}/{len(negative_indices):,} neg)")
     return filtered
-
 
 def fmt_time(seconds: float) -> str:
     """Format seconds as Hh MM m SS s.

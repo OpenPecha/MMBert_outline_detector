@@ -20,7 +20,7 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 CHECKPOINTS_DIR = OUTPUT_DIR / "checkpoints"
 
 # ── Parallelism ─────────────────────────────────────────────────────────────
-NUM_WORKERS = 4  # bounded to avoid OOM with large tokenizer subprocesses
+NUM_WORKERS = 0  # bounded to avoid OOM with large tokenizer subprocesses
 
 # ── Model ───────────────────────────────────────────────────────────────────
 MODEL_NAME = "jhu-clsp/mmBERT-base"

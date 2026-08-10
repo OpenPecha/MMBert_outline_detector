@@ -52,15 +52,17 @@ ARROW_FEATURES = Features({
     "attention_mask": Sequence(Value("int32")),
     "labels": Sequence(Value("int32")),
     "doc_id": Value("string"),
+    "has_boundary": Value("bool"),
 })
 
-_KEEP_KEYS = ("input_ids", "attention_mask", "labels", "doc_id")
+_KEEP_KEYS = ("input_ids", "attention_mask", "labels", "doc_id", "has_boundary")
 
 _ARROW_SCHEMA = pa.schema([
     ("input_ids", pa.list_(pa.int32())),
     ("attention_mask", pa.list_(pa.int32())),
     ("labels", pa.list_(pa.int32())),
     ("doc_id", pa.string()),
+    ("has_boundary", pa.bool_()),
 ])
 
 
@@ -268,7 +270,7 @@ def tokenize_and_label(
 
     Returns:
         List of example dicts with ``input_ids``, ``attention_mask``,
-        ``labels``, and ``boundary_char_positions``.
+        ``labels``, ``has_boundary``, and ``boundary_char_positions``.
     """
     boundary_chars = create_boundary_set(breakpoints, boundary_radius)
 
@@ -309,6 +311,7 @@ def tokenize_and_label(
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
                 "labels": labels,
+                "has_boundary": bool(window_boundary_positions),
                 "boundary_char_positions": window_boundary_positions,
             }
         )
@@ -533,32 +536,35 @@ def downsample_negatives(
     dataset: Dataset,
     neg_ratio: float,
     seed: int,
-    batch_size: int = 1000,
 ) -> Dataset:
     """Keep all windows with >= 1 B label; subsample O-only windows.
 
+    Relies on the precomputed ``has_boundary`` bool column written during
+    tokenization, so this is an index filter — no per-token label scan.
+
     Args:
-        dataset: Disk-backed HuggingFace Dataset.
+        dataset: Disk-backed HuggingFace Dataset with ``has_boundary``.
         neg_ratio: Fraction of O-only windows to retain (0.0–1.0).
         seed: RNG seed for reproducibility.
-        batch_size: Rows loaded per batch during label scanning.
 
     Returns:
         Filtered Dataset (new Arrow table, not a view).
+
+    Raises:
+        KeyError: If ``has_boundary`` is missing from *dataset*.
     """
+    if "has_boundary" not in dataset.column_names:
+        raise KeyError(
+            "Dataset is missing 'has_boundary'; re-run prepare-data so the "
+            "column is written during tokenization."
+        )
+
     rng = random.Random(seed)
-    pos_indices: list[int] = []
-    neg_indices: list[int] = []
+    flags = dataset["has_boundary"]
+    pos_indices = [i for i, flag in enumerate(flags) if flag]
+    neg_indices = [i for i, flag in enumerate(flags) if not flag]
 
-    for start in range(0, len(dataset), batch_size):
-        batch_labels = dataset[start : start + batch_size]["labels"]
-        for j, labels in enumerate(batch_labels):
-            if any(lbl == LABEL_B for lbl in labels):
-                pos_indices.append(start + j)
-            else:
-                neg_indices.append(start + j)
-
-    n_keep = max(1, int(len(neg_indices) * neg_ratio))
+    n_keep = max(1, int(len(neg_indices) * neg_ratio)) if neg_indices else 0
     sampled_neg = rng.sample(neg_indices, min(n_keep, len(neg_indices)))
 
     keep_indices = pos_indices + sampled_neg
